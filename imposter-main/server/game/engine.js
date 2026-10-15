@@ -11,7 +11,10 @@ export function startRound(lobby, now = Date.now(), random = Math.random) {
   if (alive.length < MIN_PLAYERS) throw new Error(`At least ${MIN_PLAYERS} players are required.`);
   lobby.round += 1;
   lobby.secretWord = chooseWord(random);
-  lobby.impostorId = alive[Math.floor(random() * alive.length)].id;
+  const incumbent = lobby.players.get(lobby.impostorId);
+  if (lobby.gameMode !== 'continuous' || !incumbent?.alive) {
+    lobby.impostorId = alive[Math.floor(random() * alive.length)].id;
+  }
   lobby.clues = new Map();
   lobby.votes = new Map();
   lobby.voteResolved = false;

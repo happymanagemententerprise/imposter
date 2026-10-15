@@ -13,6 +13,7 @@ The application uses a client-server architecture hosted on a single Node.js ins
 
 ## Components
 - **Express server:** Serves static assets for the phone view (`/`) and TV view (`/tv`).
+- **QR endpoint:** `/api/qr.svg?room=CODE` creates a room-specific join QR for the TV display.
 - **Socket.io server:** Handles all real-time communication.
 - **Game state manager:** In-memory store of lobbies, players, roles, clues, and votes.
 - **Phone client:** Join form, role reveal, clue input, voting UI.
@@ -39,7 +40,7 @@ The application uses a client-server architecture hosted on a single Node.js ins
 ## State Model (in memory)
 ```js
 lobbies: Map<roomCode, {
-  hostId, phase,            // 'lobby' | 'clue' | 'display' | 'vote' | 'ended'
+  hostId, phase, gameMode,  // phase: 'lobby' | 'clue' | 'display' | 'vote' | 'ended'; gameMode: 'round' | 'continuous'
   secretWord, impostorId,
   players: Map<playerId, { name, socketId, alive, connected }>,
   clues: Map<playerId, string>,
@@ -60,6 +61,7 @@ lobbies: Map<roomCode, {
 | `submit-word` | client → server | Submit clue; rejects duplicates |
 | `clues-revealed` | server → all | Broadcast all clues to TV and phones |
 | `submit-vote` | client → server | Vote for a suspected player |
+| `set-game-mode` | host → server | Select `round` or `continuous` mode while in the lobby |
 | `vote-result` | server → all | Eliminated player and outcome |
 | `game-over` | server → all | Winner and Impostor reveal |
 | `state-update` | server → all | Roster and phase sync |

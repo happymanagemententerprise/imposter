@@ -17,6 +17,13 @@ Built with Node.js, Express, and Socket.io for low-latency communication and eas
    - **Players Win:** The Impostor is correctly identified and voted out.
 - **Impostor Wins:** The Impostor survives a vote with three or fewer players left.
 
+### Game Modes
+
+- **Round Mode:** A new impostor is selected at the start of every round.
+- **Continuous Mode:** The same impostor keeps their role across rounds until caught. Each new round still gets a fresh secret word.
+- The host picks the mode in the lobby before starting. The mode stays locked during a game.
+- Scan the TV QR code to open the phone join page with the room code already filled in.
+
 ---
 
 ## 🛠️ Tech Stack
@@ -51,7 +58,7 @@ npm start
 The server runs on `http://localhost:3000` by default (or the port set in `PORT`).
 
 ### 4. Play Locally
-- Open `http://localhost:3000/tv` on a laptop or TV browser.
+- Open `http://localhost:3000/tv` on a laptop or TV browser. The TV shows a QR code that takes players straight to the room join form.
 - Open `http://<your-local-ip>:3000` on the first phone and create a room. Enter its room code on the TV and share it with the other phones.
 - At least three connected players are required. The host controls voting and advancing rounds from their phone.
 

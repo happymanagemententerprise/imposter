@@ -4,6 +4,15 @@ const statusBox = $('status');
 let me = { roomCode: sessionStorage.getItem('roomCode'), playerId: sessionStorage.getItem('playerId'), name: sessionStorage.getItem('playerName') || '' };
 let state = null, role = null, roleOpensAt = 0, selectedVote = null, voted = false, clueSubmitted = false, timerTick = null;
 $('name').value = me.name;
+const invitedRoom = new URLSearchParams(location.search).get('room')?.trim().toUpperCase();
+if (invitedRoom && /^[A-Z2-9]{4}$/.test(invitedRoom)) {
+  $('room-input').value = invitedRoom;
+  $('create-btn').classList.add('hidden');
+  document.querySelector('.divider').classList.add('hidden');
+  $('join-btn').textContent = 'Join this room';
+  $('join-btn').classList.add('join-invite');
+  $('name').focus();
+}
 
 function showStatus(message, kind = 'info') { statusBox.textContent = message; statusBox.className = `status show ${kind}`; }
 function clearStatus() { statusBox.className = 'status'; statusBox.textContent = ''; }
@@ -18,13 +27,14 @@ $('join-btn').onclick = () => join($('name').value, $('room-input').value.toUppe
 $('room-input').addEventListener('input', e => e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4));
 $('start-btn').onclick = () => socket.emit('start-game', payload());
 $('copy-btn').onclick = async () => { try { await navigator.clipboard.writeText(me.roomCode); $('copy-btn').textContent = 'Copied!'; setTimeout(() => $('copy-btn').textContent = 'Copy code',1400); } catch { showStatus(`Room code: ${me.roomCode}`,'info'); } };
+$('mode-picker').querySelectorAll('[data-mode]').forEach(button => button.onclick = () => socket.emit('set-game-mode',payload({mode:button.dataset.mode})));
 
 socket.on('connect', () => { if (me.roomCode && me.playerId && me.name) socket.emit('join-lobby', { ...me }); });
 socket.on('disconnect', () => showStatus('Connection lost. Reconnecting…','info'));
 socket.on('connect_error', () => showStatus('Could not connect to the game server. Retrying…','error'));
 socket.on('game-error', ({ message }) => showStatus(message,'error'));
 socket.on('lobby-joined', ({ roomCode, playerId }) => { me.roomCode = roomCode; me.playerId = playerId; sessionStorage.setItem('roomCode',roomCode); sessionStorage.setItem('playerId',playerId); $('room-code').textContent = roomCode; showView('lobby-view'); clearStatus(); });
-socket.on('state-update', next => { state = next; $('phase-pill').classList.remove('hidden'); $('phase-text').textContent = next.phase === 'clue' ? 'Clue round' : next.phase; if (next.phase === 'lobby') renderLobby(); else if (next.phase === 'ended') renderEnded(next); else renderGame(next); });
+socket.on('state-update', next => { state = next; $('phase-pill').classList.remove('hidden'); $('phase-text').textContent = ({clue:'Clue round',display:'Discuss',vote:'Voting',ended:'Final reveal'})[next.phase] || next.phase; if (next.phase === 'lobby') renderLobby(); else if (next.phase === 'ended') renderEnded(next); else renderGame(next); });
 socket.on('role-assigned', info => { role = info; roleOpensAt = info.opensAt; clueSubmitted = Boolean(info.clueSubmitted); selectedVote = null; voted = false; renderRole(); });
 socket.on('clue-accepted', () => { clueSubmitted = true; showStatus('Clue locked in. Keep it secret!','success'); renderRole(); });
 socket.on('vote-accepted', () => { voted = true; showStatus('Vote recorded.','success'); renderGame(state); });
@@ -33,10 +43,15 @@ socket.on('room-closed', ({ message }) => { sessionStorage.clear(); me = {}; sta
 
 function renderLobby() {
   showView('lobby-view'); const players = state.players;
-  $('player-count').textContent = `(${players.length})`;
-  $('players').innerHTML = players.map(p => `<div class="player ${p.connected?'':'disconnected'}"><span class="player-name">${escapeHtml(p.name)}${p.id === state.hostId ? ' <span class="muted small">· host</span>':''}</span><span class="player-meta">${p.connected?'Ready':'Reconnecting'}</span></div>`).join('');
-  const host = state.hostId === me.playerId; $('start-btn').classList.toggle('hidden',!host); $('start-btn').disabled = players.length < 3;
-  $('start-hint').textContent = host ? (players.length < 3 ? 'At least 3 players are needed to start.' : 'Everyone’s here? Start the game.') : 'Waiting for the host to start…';
+  $('player-count').textContent = `${state.connectedCount} / 3 minimum`;
+  $('players').innerHTML = players.map((p,index) => `<div class="player ${p.connected?'':'disconnected'}"><span class="player-avatar avatar-${index%5}">${escapeHtml(p.name.slice(0,1).toUpperCase())}</span><span class="player-detail"><span class="player-name">${escapeHtml(p.name)}${p.id === state.hostId ? ' <span class="host-tag">HOST</span>':''}${p.id===me.playerId?' <span class="you-tag">YOU</span>':''}</span><span class="player-meta">${p.connected?'Ready to play':'Reconnecting…'}</span></span><i class="connection-dot ${p.connected?'online':''}"></i></div>`).join('');
+  const host = state.hostId === me.playerId;
+  $('mode-picker').classList.toggle('hidden',!host); $('mode-summary').classList.toggle('hidden',host);
+  $('mode-summary').innerHTML = `<span class="mode-summary-icon">${state.gameMode==='continuous'?'∞':'↻'}</span><span><strong>${state.gameMode==='continuous'?'Continuous Mode':'Round Mode'}</strong><small>${state.gameMode==='continuous'?'The impostor stays the same each round.':'A new impostor is selected each round.'}</small></span>`;
+  $('mode-picker').querySelectorAll('[data-mode]').forEach(b=>{const selected=b.dataset.mode===state.gameMode;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});
+  $('start-btn').classList.toggle('hidden',!host); $('start-btn').disabled = state.connectedCount < 3;
+  $('start-hint').textContent = host ? (state.connectedCount < 3 ? `Waiting for ${3-state.connectedCount} more ${3-state.connectedCount===1?'player':'players'}…` : 'Everyone’s here. Deal the first word.') : 'The host is setting up the room…';
+  $('tv-link').href=`/tv?room=${encodeURIComponent(state.roomCode)}`;
 }
 function renderRole() {
   if (!role) return;
@@ -72,7 +87,7 @@ function renderGame(next) {
   }
 }
 function renderEnded(next) {
-  showView('ended-view'); $('ended-view').innerHTML = `<div class="card winner"><div class="winner-icon">${next.winner==='players'?'🎉':'🕵️'}</div><div class="eyebrow">Game over</div><h2>${next.winner==='players'?'Players win!':'Impostor wins!'}</h2><p class="muted">The impostor was <strong>${escapeHtml(next.impostorName || 'unknown')}</strong>.</p><p class="muted small">Room ${escapeHtml(next.roomCode)} · Round ${next.round}</p></div>`;
+  showView('ended-view'); $('ended-view').innerHTML = `<div class="card winner"><div class="winner-icon">${next.winner==='players'?'✦':'◉'}</div><div class="eyebrow">${next.gameMode==='continuous'?'Continuous Mode':'Round Mode'} · ${next.round} ${next.round===1?'round':'rounds'}</div><h2>${next.winner==='players'?'The group got them.':'The impostor wins.'}</h2><p class="muted">The impostor was <strong>${escapeHtml(next.impostorName || 'unknown')}</strong>.</p><div class="final-word"><span class="small muted">THE SECRET WORD</span><strong>${escapeHtml(next.secretWord||'—')}</strong></div><p class="muted small">Room ${escapeHtml(next.roomCode)}</p></div>`;
 }
 function startCountdown(id, deadline) {
   if (timerTick) clearInterval(timerTick);

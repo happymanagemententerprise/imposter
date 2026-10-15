@@ -109,6 +109,16 @@ export function attachSockets(io) {
       } catch (e) { error(socket, e.message); }
     });
 
+    socket.on('set-game-mode', ({ roomCode, mode } = {}) => {
+      const { lobby, playerId } = resolvePlayer(socket, { roomCode });
+      if (!lobby || !lobby.players.has(playerId)) return error(socket, 'Join a room before choosing a game mode.');
+      if (lobby.hostId !== playerId) return error(socket, 'Only the host can choose the game mode.');
+      if (lobby.phase !== 'lobby') return error(socket, 'The game mode is locked after the game starts.');
+      if (!['round', 'continuous'].includes(mode)) return error(socket, 'Choose a valid game mode.');
+      lobby.gameMode = mode;
+      broadcast(lobby);
+    });
+
     socket.on('submit-word', (data = {}) => {
       const { lobby, playerId } = resolvePlayer(socket, data);
       if (!lobby || !lobby.players.has(playerId)) return error(socket, 'Join the room before submitting a clue.');
